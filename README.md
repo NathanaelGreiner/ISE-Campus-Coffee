@@ -18,7 +18,7 @@ Then, to build the application, run the following command in the command line (o
 ```shell
 gradle build
 ```
-**Note:** The application does not load any data on startup. In the `dev` profile you can seed or reset it on demand — see [Managing data](#managing-data-dev-profile-only).
+**Note:** The application does not load any data on startup. In the `dev` profile you can seed or reset it on demand — see [Dev endpoints](#dev-endpoints-apidev).
 
 You can use the quiet mode to suppress most log messages:
 
@@ -37,72 +37,6 @@ Static analysis runs with [detekt](https://detekt.dev/), also wired into `check`
 fails on findings too. A per-module `detekt-baseline.xml` grandfathers the existing findings (regenerate
 it with `gradle detektBaseline`).
 
-## Code coverage and mutation testing
-
-### Code coverage (JaCoCo)
-
-Coverage is measured with JaCoCo. Most production code in `domain`, `api`, and `data` is tested
-by the system and acceptance tests in the `application` module, so per-module reports alone are
-misleading. The `coverage` module aggregates the execution data from every module into a single
-report that covers all of them together.
-
-Run the full build to produce the reports:
-
-```shell
-gradle build
-```
-
-- Combined report: [`coverage/build/reports/jacoco/testCodeCoverageReport/html/index.html`](coverage/build/reports/jacoco/testCodeCoverageReport/html/index.html)
-- Per-module reports: `domain/build/reports/jacoco/test/html/index.html`, `api/...`, `data/...`
-
-`gradle build` also enforces the coverage gate (the `coverageGate` task, wired into `check`): the build
-fails when the aggregated line or branch coverage is below the minimums configured in
-[`coverage/build.gradle.kts`](coverage/build.gradle.kts). The minimums are set to the current measured
-coverage; raise them as you add tests so the bar follows the suite. The CI workflow runs `gradle build`
-and uploads the reports as the `jacoco-coverage-reports` artifact, so you can browse the uncovered lines
-without a local run.
-
-### Mutation testing (PITest)
-
-Mutation testing reports whether the tests actually detect changed behavior. It is opt-in via the
-`-Pmutation` property and meant to be run locally, since it re-runs the tests for every mutant and the
-data and system tests run against a PostgreSQL database in a container managed by Testcontainers. Each
-module runs PITest against its own tests and writes its own report: `domain` mutates `domain.*`, `api`
-mutates `api.*`, and `data` mutates `data.*`, each against that module's own unit and integration tests;
-the `application` module additionally mutates `api.*` and `data.*` against the system and acceptance
-tests via additional mutable code paths (the Gradle equivalent of Maven's `crossModule`). The api and
-data classes therefore appear in two reports (the module's own and application's), which are not merged.
-Read a module's report for what its own tests catch and the application report for what the system tests
-catch (the controllers, for example, have no api-local tests and are killed only there). The generated
-`*MapperImpl` classes are excluded from mutation, mirroring the JaCoCo gate.
-
-```shell
-# Full run across all modules.
-gradle pitest -Pmutation
-
-# Stronger or exhaustive mutator groups produce more, harder-to-kill mutants:
-gradle pitest -Pmutation -Ppitest.mutators=STRONGER
-gradle pitest -Pmutation -Ppitest.mutators=ALL
-
-# Scope to one module while iterating (e.g., only domain, skipping the slow Testcontainers modules):
-gradle :domain:pitest -Pmutation
-```
-
-Reports are written per module at `<module>/build/reports/pitest/index.html` (`domain`, `api`, `data`, and
-`application`).
-
-Surviving mutants point to behavior the tests run but do not assert; add assertions until they are
-killed.
-
-### Growing the test suite
-
-The reports are a worklist for new tests:
-
-1. Open the aggregate coverage report and pick an uncovered package or class.
-2. Add tests for the uncovered lines and branches.
-3. Run PITest on that class and add assertions until the surviving mutants are killed.
-4. Raise the coverage minimums in `coverage/build.gradle.kts` to the new measured level.
-
 ## Start application
 
 First, make sure that the Docker daemon is running.
@@ -119,6 +53,9 @@ gradle :application:bootRun --args='--spring.profiles.active=dev'
 ```
 **Note:** The data source is configured via the [`application.yaml`](application/src/main/resources/application.yaml) file.
 
+The application starts with an empty database. Seed it with the fixture dataset so the examples below
+have data to work with — see [Dev endpoints](#dev-endpoints-apidev).
+
 ## Explore the REST API
 
 ### OpenAPI specification
@@ -129,6 +66,23 @@ You can also access the Swagger UI to interactively explore the API at [`http://
 ### Local testing
 
 You can use `curl` in the command line to send HTTP requests to the REST API.
+
+#### Dev endpoints (/api/dev)
+
+The application does not load any data on startup (in any profile), and the database persists across
+application restarts. In the `dev` profile, three endpoints let you inspect, replace, and clear the
+data on demand (they are not registered outside `dev`):
+
+```shell
+# report the current counts ({users, pos, reviews})
+curl http://localhost:8080/api/dev/data
+
+# replace the data with the fixture dataset (idempotent: clears first, safe to repeat)
+curl --request PUT http://localhost:8080/api/dev/data
+
+# clear all data
+curl --request DELETE http://localhost:8080/api/dev/data
+```
 
 #### POS endpoints (/api/pos)
 
@@ -280,23 +234,6 @@ curl --request PUT http://localhost:8080/api/reviews/4/approve?user_id=2 # use e
 curl --request PUT http://localhost:8080/api/reviews/4/approve?user_id=2 # use existing review ID and user ID (different from author)
 ```
 
-## Managing data (`dev` profile only)
-
-The application does not load any data on startup (in any profile), and the database persists across
-application restarts. In the `dev` profile, three endpoints let you inspect, replace, and clear the
-data on demand (they are not registered outside `dev`):
-
-```shell
-# report the current counts ({users, pos, reviews})
-curl http://localhost:8080/api/dev/data
-
-# replace the data with the fixture dataset (idempotent: clears first, safe to repeat)
-curl --request PUT http://localhost:8080/api/dev/data
-
-# clear all data
-curl --request DELETE http://localhost:8080/api/dev/data
-```
-
 ## Docker
 
 ### Building an image from the Dockerfile
@@ -326,7 +263,7 @@ Explanation of selected options:
 `docker run ... -it`  runs a container in interactive mode with a pseudo-TTY (terminal).
 `docker run ... --rm` automatically removes the container (and its associated resources) if it exists already.
 
-Both run methods start the app in the `dev` profile. Since the application does not load data on startup, the API comes up empty — seed it with `PUT /api/dev/data` (see [Managing data](#managing-data-dev-profile-only)).
+Both run methods start the app in the `dev` profile. Since the application does not load data on startup, the API comes up empty — seed it with `PUT /api/dev/data` (see [Dev endpoints](#dev-endpoints-apidev)).
 
 #### Use Docker compose to run the app container together with the DB container
 
@@ -354,7 +291,7 @@ Stop and remove containers and networks:
 docker compose down
 ```
 
-The `db` service has no named volume, so `docker compose down` discards its data and the next `docker compose up` starts with an empty database — reseed it with `POST /api/dev/data`.
+The `db` service has no named volume, so `docker compose down` discards its data and the next `docker compose up` starts with an empty database — reseed it with `PUT /api/dev/data`.
 
 ## Deployment
 
@@ -405,3 +342,70 @@ Deploying service 'campus-coffee' in project 'sotorrent-org' in region 'europe-w
 ✓ Routing traffic...
 Service 'campus-coffee' has been deployed.
 Service URL: https://campus-coffee-4dx5ftg7eq-ew.a.run.app
+````
+
+## Code coverage and mutation testing
+
+### Code coverage (JaCoCo)
+
+Coverage is measured with JaCoCo. Most production code in `domain`, `api`, and `data` is tested
+by the system and acceptance tests in the `application` module, so per-module reports alone are
+misleading. The `coverage` module aggregates the execution data from every module into a single
+report that covers all of them together.
+
+Run the full build to produce the reports:
+
+```shell
+gradle build
+```
+
+- Combined report: [`coverage/build/reports/jacoco/testCodeCoverageReport/html/index.html`](coverage/build/reports/jacoco/testCodeCoverageReport/html/index.html)
+- Per-module reports: `domain/build/reports/jacoco/test/html/index.html`, `api/...`, `data/...`
+
+`gradle build` also enforces the coverage gate (the `coverageGate` task, wired into `check`): the build
+fails when the aggregated line or branch coverage is below the minimums configured in
+[`coverage/build.gradle.kts`](coverage/build.gradle.kts). The minimums are set to the current measured
+coverage; raise them as you add tests so the bar follows the suite. The CI workflow runs `gradle build`
+and uploads the reports as the `jacoco-coverage-reports` artifact, so you can browse the uncovered lines
+without a local run.
+
+### Mutation testing (PITest)
+
+Mutation testing reports whether the tests actually detect changed behavior. It is opt-in via the
+`-Pmutation` property and meant to be run locally, since it re-runs the tests for every mutant and the
+data and system tests run against a PostgreSQL database in a container managed by Testcontainers. Each
+module runs PITest against its own tests and writes its own report: `domain` mutates `domain.*`, `api`
+mutates `api.*`, and `data` mutates `data.*`, each against that module's own unit and integration tests;
+the `application` module additionally mutates `api.*` and `data.*` against the system and acceptance
+tests via additional mutable code paths (the Gradle equivalent of Maven's `crossModule`). The api and
+data classes therefore appear in two reports (the module's own and application's), which are not merged.
+Read a module's report for what its own tests catch and the application report for what the system tests
+catch (the controllers, for example, have no api-local tests and are killed only there). The generated
+`*MapperImpl` classes are excluded from mutation, mirroring the JaCoCo gate.
+
+```shell
+# Full run across all modules.
+gradle pitest -Pmutation
+
+# Stronger or exhaustive mutator groups produce more, harder-to-kill mutants:
+gradle pitest -Pmutation -Ppitest.mutators=STRONGER
+gradle pitest -Pmutation -Ppitest.mutators=ALL
+
+# Scope to one module while iterating (e.g., only domain, skipping the slow Testcontainers modules):
+gradle :domain:pitest -Pmutation
+```
+
+Reports are written per module at `<module>/build/reports/pitest/index.html` (`domain`, `api`, `data`, and
+`application`).
+
+Surviving mutants point to behavior the tests run but do not assert; add assertions until they are
+killed.
+
+### Growing the test suite
+
+The reports are a worklist for new tests:
+
+1. Open the aggregate coverage report and pick an uncovered package or class.
+2. Add tests for the uncovered lines and branches.
+3. Run PITest on that class and add assertions until the surviving mutants are killed.
+4. Raise the coverage minimums in `coverage/build.gradle.kts` to the new measured level.
