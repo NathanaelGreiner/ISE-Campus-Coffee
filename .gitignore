@@ -21,6 +21,8 @@ Thumbs.db
 ##########################
 .idea/
 *.iml
+# IntelliJ compile output, and where `gcloud run compose up` writes the generated Cloud Run service manifest
+out/
 
 ######################
 # Visual Studio Code #

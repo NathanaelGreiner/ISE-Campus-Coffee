@@ -23,6 +23,8 @@ data class ReviewDto(
     val updatedAt: LocalDateTime? = null,
     @field:NotNull(message = "POS ID cannot be null.")
     val posId: Long?,
+    // TODO (Exercise 2): the author is the authenticated user, so authorId is read-only (server-set, shown
+    //  in responses); a POST/PUT that supplies an authorId must be rejected rather than trusted.
     @field:NotNull(message = "Author ID cannot be null.")
     val authorId: Long?,
     @field:NotBlank(message = "Review text cannot be empty.")

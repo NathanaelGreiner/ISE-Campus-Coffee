@@ -56,6 +56,8 @@ class ReviewController(
         @PathVariable id: Long
     ): ResponseEntity<ReviewDto> = super.getById(id)
 
+    // TODO (Exercise 2): the author of a created review must be the authenticated user (resolve it via
+    //  CurrentUserProvider), never the request body; a body that carries an authorId must be rejected.
     @Operation
     @CrudOperation(operation = CREATE, resource = REVIEW)
     @PostMapping("")
@@ -95,6 +97,8 @@ class ReviewController(
     ): ResponseEntity<List<ReviewDto>> =
         ResponseEntity.ok(reviewService.filter(posId, approved).map { reviewDtoMapper.fromDomain(it) })
 
+    // TODO (Exercise 5): the approver is the authenticated user, not a `user_id` query parameter; drop the
+    //  parameter and resolve the caller via CurrentUserProvider so nobody can approve as someone else.
     @Operation(summary = "Approve a review by ID.")
     @PutMapping("/{id}/approve")
     fun approve(

@@ -45,6 +45,8 @@ class UserController(
     @GetMapping("")
     override fun getAll(): ResponseEntity<List<UserDto>> = super.getAll()
 
+    // TODO (Exercise 2): reading a user is self-or-admin. Resolve the caller via CurrentUserProvider and let
+    //  the domain decide (a non-admin may read only their own record); the same applies to the filter below.
     @Operation
     @CrudOperation(operation = GET_BY_ID, resource = USER)
     @GetMapping("/{id}")

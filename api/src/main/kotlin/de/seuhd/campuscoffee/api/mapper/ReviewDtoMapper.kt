@@ -34,6 +34,9 @@ abstract class ReviewDtoMapper : DtoMapper<Review, ReviewDto> {
      * `approved` value is ignored: a new review starts unapproved with a zero approval count, and on an
      * update the service restores the persisted approval state (approvals are owned by the approval
      * workflow, never by the client).
+     *
+     * TODO (Exercise 2): the author is the authenticated user, not the DTO's authorId; the controller must
+     *  supply it (and a body carrying an authorId is rejected). Adjust how the author is resolved here.
      */
     override fun toDomain(source: ReviewDto): Review =
         Review(
